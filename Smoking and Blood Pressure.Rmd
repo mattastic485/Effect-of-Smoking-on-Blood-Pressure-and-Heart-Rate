@@ -1,0 +1,377 @@
+---
+title: "Smoking and Blood Pressure"
+author: "Matthew Poole Chicano"
+date: "2022-07-27"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading Prerequisites 
+
+Loading tidyverse: 
+```{r}
+library(tidyverse)
+library(DescTools)
+```
+
+Loading the dataset:
+```{r}
+heart <- read.csv("heart_cleaned.csv")
+```
+
+
+## Manipulating the Data
+
+Viewing the structure:
+```{r}
+str(heart)
+```
+
+Removing unnecessary columns:
+```{r}
+heart <-
+  select(
+    heart,
+    randid,
+    sex,
+    age,
+    sysbp,
+    diabp,
+    cigpday,
+    heartrte,
+    prevhyp,
+    hyperten,
+    timehyp
+  )
+
+head(heart)
+```
+
+
+Filtering for smokers:
+```{r}
+smokers <-
+  filter(
+    heart,
+    cigpday >= 1
+  )
+
+head(smokers)
+```
+
+
+Creating light, moderate, and heavy smokers group:
+```{r}
+smokers <-
+  mutate(
+    smokers,
+    smkerst = 
+      case_when(
+        cigpday <= 5 ~ "light",
+        cigpday >= 6 & cigpday <= 20 ~ "moderate",
+        cigpday >= 21 ~ "heavy"
+      )
+  )
+
+head(smokers, 10)
+```
+
+
+Converting necessary data into factors:
+```{r}
+smokers <- mutate(smokers, 
+                  sex = factor(smokers$sex, labels = c("Male", "Female")),
+                  prevhyp = factor(smokers$prevhyp, labels = c("free", "prev")),
+                  hyperten = factor(smokers$hyperten, labels = c("free", "prev")),
+                  smkerst = factor(smokers$smkerst, levels = c("light", "moderate", "heavy"),
+                                                    labels = c("Light", "Moderate", "Heavy")))
+
+str(smokers)
+```
+
+## Descriptive Stats
+
+Comparing by smoker status:
+```{r}
+smokers_descrip <- summarise(group_by(smokers, smkerst), 
+                             "N" = n(),
+                             "Mean_SysBP" = mean(sysbp, na.rm = T),
+                             "Mean_DiaBP" = mean(diabp, na.rm = T),
+                             "Mean_Heartrate" = mean(heartrte, na.rm = T),
+                             "SD_SysBP" = sd(sysbp, na.rm = T),
+                             "SD_DiaBP" = sd(diabp, na.rm = T),
+                             "SD_Heartrate" = sd(heartrte, na.rm = T),
+                             "SE_SysBP" = sd(sysbp, na.rm = T)/sqrt(length(smkerst)),
+                             "SE_DiaBP" = sd(diabp, na.rm = T)/sqrt(length(smkerst)),
+                             "SE_Heartrate" = sd(heartrte, na.rm = T)/sqrt(length(smkerst)))
+
+smokers_descrip
+  
+```
+
+
+Comparing by smoker status x sex:
+```{r}
+smokers_descrip_sex <- summarise(group_by(smokers, smkerst, sex), 
+                             "N" = n(),
+                             "Mean_SysBP" = mean(sysbp, na.rm = T),
+                             "Mean_DiaBP" = mean(diabp, na.rm = T),
+                             "Mean_Heartrate" = mean(heartrte, na.rm = T),
+                             "SD_SysBP" = sd(sysbp, na.rm = T),
+                             "SD_DiaBP" = sd(diabp, na.rm = T),
+                             "SD_Heartrate" = sd(heartrte, na.rm = T),
+                             "SE_SysBP" = sd(sysbp, na.rm = T)/sqrt(length(smkerst)),
+                             "SE_DiaBP" = sd(diabp, na.rm = T)/sqrt(length(smkerst)),
+                             "SE_Heartrate" = sd(heartrte, na.rm = T)/sqrt(length(smkerst)))
+
+smokers_descrip_sex
+```
+
+
+Summary of participants:
+```{r}
+summarise(group_by(smokers, sex), 
+          "N" = n(),
+          "Mean_Age" = mean(age),
+          "SD" = sd(age),
+          "Min" = min(age),
+          "Max" = max(age))
+
+```
+
+Total:
+```{r}
+summarise(smokers,
+          "N" = n(),
+          "Mean_Age" = mean(age, na.rm = T),
+          "SD" = sd(age, na.rm = T),
+          "Min" = min(age, na.rm = T),
+          "Max" = max(age, na.rm = T))
+```
+
+Group x sex x age:
+```{r}
+summarise(group_by(smokers, smkerst, sex),
+          "N" = n(),
+          "Mean_Age" = mean(age, na.rm = T),
+          "SD" = sd(age, na.rm = T))
+```
+
+
+## Visualizing the Data
+
+Bar graph of blood pressure:
+```{r}
+# creating new data frame to plot both SysBP and DiaBP into the same graph
+smokers_tb <- tribble(~smkerst, ~BPtype, ~value, ~SE,
+                      "Light", "SysBP", 135.0591, 2.5228948,
+                      "Light", "DiaBP", 79.69355, 1.2241013,
+                      "Moderate", "SysBP", 131.7338, 1.5415797,
+                      "Moderate", "DiaBP", 79.19403, 0.8022114,
+                      "Heavy", "SysBP", 135.7479, 0.9320387,
+                      "Heavy", "DiaBP", 80.95062, 0.4976859)
+
+# factoring data to ensure proper order
+smokers_tb$smkerst <- factor(smokers_tb$smkerst, levels = c("Light", "Moderate", "Heavy"))
+
+
+ggplot(smokers_tb,
+       aes(x = BPtype, 
+           y = value,
+           fill = BPtype)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  geom_errorbar(aes(ymin = value - SE,
+                    ymax = value + SE,
+                    width = .75)) +
+  facet_grid(~smkerst, switch = "x") +
+  labs(title = "Effects of Smoking on Blood Pressure",
+       subtitle = "Separated by Smoking Status",
+       x = "Smoking Status",
+       y = "Average Value (mmHG)",
+       fill = "Type of Blood Pressure") +
+  theme(axis.text.x = element_blank())
+```
+
+Bar graph for blood pressure seperated by sex:
+```{r}
+# creating new data frame to plot both SysBP and DiaBP into the same graph
+smokers_tb_sex <- tribble(~smkerst, ~sex, ~BPtype, ~value, ~SE, 
+                      "Light", "Male", "SysBP", 134.9444, 3.508537,
+                      "Light", "Male", "DiaBP", 80.87500, 2.1920107,
+                      "Light", "Female", "SysBP", 135.1316, 3.493090,
+                      "Light", "Female", "DiaBP", 78.94737, 1.4470978,
+                      "Moderate", "Male", "SysBP", 132.3014, 2.182780,
+                      "Moderate", "Male", "DiaBP", 78.79452, 1.3806128,
+                      "Moderate", "Female", "SysBP", 131.4102, 2.081844,
+                      "Moderate", "Female", "DiaBP", 79.42188, 0.9869261,
+                      "Heavy", "Male", "SysBP", 136.3764, 1.177746,
+                      "Heavy", "Male", "DiaBP", 81.55535, 0.6434208, 
+                      "Heavy", "Female", "SysBP",134.9558, 1.496394,
+                      "Heavy", "Female", "DiaBP", 80.18837, 0.7782584)
+
+# factoring data to ensure proper order
+smokers_tb_sex$smkerst <- factor(smokers_tb_sex$smkerst, levels = c("Light", "Moderate", "Heavy"))
+
+
+ggplot(smokers_tb_sex,
+       aes(x = BPtype, 
+           y = value,
+           fill = BPtype)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  geom_errorbar(aes(ymin = value - SE,
+                    ymax = value + SE,
+                    width = .75)) +
+  facet_grid(sex~smkerst, switch = "x") +
+  labs(title = "Figure 1",
+       subtitle = "The Effects of Smoking on Blood Pressure",
+       x = "Smoking Status",
+       y = "Average Value (mmHG)",
+       fill = "Type of Blood Pressure") +
+  theme(axis.text.x = element_blank())
+```
+
+Bar graph for heart rate:
+```{r}
+ggplot(smokers_descrip,
+       aes(x = smkerst,
+           y = Mean_Heartrate)) +
+  geom_bar(stat = "identity",
+           fill = "firebrick") +
+  theme_minimal() +
+  geom_errorbar(aes(ymin = Mean_Heartrate - SE_Heartrate,
+                    ymax = Mean_Heartrate + SE_Heartrate,
+                    width = .75)) +
+  labs(title = "Effects of Smoking on Heart Rate",
+       subtitle = "Separated by Smoking Status",
+       x = "Smoking Status",
+       y = "Average Value (bpm)")
+```
+
+
+Bar graph for Heart rate separated by sex:
+```{r}
+ggplot(smokers_descrip_sex,
+       aes(x = smkerst,
+           y = Mean_Heartrate,
+           fill = sex)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  geom_errorbar(aes(ymin = Mean_Heartrate - SE_Heartrate,
+                    ymax = Mean_Heartrate + SE_Heartrate,
+                    width = .75)) +
+  facet_wrap(~sex) +
+  theme(legend.position = "none") +
+  labs(title = "Figure 2",
+       subtitle = "Effects of Smoking on Heart Rate",
+       x = "Smoking Status",
+       y = "Average Value (bpm)")
+```
+
+## ANOVA 
+
+sysBP:
+```{r}
+smokers_sysbp_aov <- aov(sysbp ~ smkerst,
+                   data = smokers)
+
+summary(smokers_sysbp_aov)
+```
+
+diaBP:
+```{r}
+smokers_diabp_aov <- aov(diabp ~ smkerst,
+                   data = smokers)
+
+summary(smokers_diabp_aov)
+```
+
+heart rate:
+```{r}
+smokers_hr_aov <- aov(heartrte ~ smkerst,
+                   data = smokers)
+
+summary(smokers_hr_aov)
+```
+
+
+
+## Post-hocs
+
+SysBP:
+```{r}
+ScheffeTest(smokers_sysbp_aov)
+```
+
+
+DiaBP:
+```{r}
+ScheffeTest(smokers_diabp_aov)
+```
+
+
+
+
+## ANOVA by sex
+
+```{r}
+fem = filter(smokers, sex == "Female")
+
+head(fem)
+```
+
+Female sysbp:
+```{r}
+fem_sys_aov <- aov(sysbp ~ smkerst, 
+               data = fem)
+
+summary(fem_sys_aov)
+```
+
+Female diabp:
+```{r}
+fem_dia_aov <- aov(diabp ~ smkerst, 
+               data = fem)
+
+summary(fem_dia_aov)
+```
+
+```{r}
+fem_hr_aov <- aov(heartrte ~ smkerst, 
+               data = fem)
+
+summary(fem_hr_aov)
+```
+
+Post Hoc:
+```{r}
+ScheffeTest(fem_sys_aov)
+```
+
+
+
+
+```{r}
+mod = filter(smokers, smkerst == "Moderate")
+
+head(mod)
+```
+
+
+Moderate by sex
+```{r}
+mod_hr_test <- t.test(heartrte ~ sex, 
+                   data = mod, 
+                   paired = F, 
+                   alternative = "two.sided", 
+                   var.equal = T, 
+                   conf.level = .90)
+
+mod_hr_test
+```
+
+
